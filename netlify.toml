@@ -1,5 +1,5 @@
 [build]
-  functions = "netlify-functions"  # Directory for Netlify functions
+  functions = "api"  # Updated path to your serverless functions
 
 [dev]
-  functions = "netlify-functions"  # Same for local dev environment
+  functions = "api"  # Same for local dev environment
