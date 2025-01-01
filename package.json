@@ -2,8 +2,8 @@
   "name": "my-shazam-app",
   "version": "1.0.0",
   "scripts": {
-    "start": "netlify dev",  // For local development
-    "build": "echo 'No build required'"  // If no build step is required
+    "start": "netlify dev", 
+    "build": "echo 'No build required'" 
   },
   "dependencies": {
     "express": "^4.19.2",
