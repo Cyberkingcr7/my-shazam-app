@@ -1,55 +1,66 @@
-const express = require("express");
-const multer = require("multer");
-const fs = require("fs");
-const { Shazam } = require("unofficial-shazam");
-const { createProxyMiddleware } = require("http-proxy-middleware");
+const { Shazam } = require('unofficial-shazam');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
-const app = express();
-
-// Set up Multer for handling file uploads
-const upload = multer({ dest: "/tmp/" }); // Use /tmp for serverless compatibility
+// Set up Multer for handling file uploads (uploads are temporary in serverless functions)
+const upload = multer({ dest: '/tmp/' });
 
 // Shazam instance
 const shazam = new Shazam();
 
-app.post("/api/recognize", upload.single("audio"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No audio file uploaded" });
-  }
-
-  try {
-    // Recognize the uploaded audio file
-    const recognizeResult = await shazam.recognise(req.file.path, "en-US");
-    fs.unlinkSync(req.file.path); // Clean up temporary file
-
-    // Prepare response data (same as in your code)
-    if (
-      recognizeResult &&
-      recognizeResult.track &&
-      recognizeResult.track.title &&
-      recognizeResult.track.subtitle
-    ) {
-      const track = recognizeResult.track;
-      const songInfo = {
-        title: track.title || "Not available",
-        artist: track.subtitle || "Not available",
-        appleMusic: track.share.href || "Not available",
-        spotify: track.myshazam?.apple?.previewurl || "Not available",
-        album: track.sections[0]?.metadata?.find(item => item.title === 'Album')?.text || "Not available",
-        releaseYear: track.sections[0]?.metadata?.find(item => item.title === 'Released')?.text || "Not available",
-        genre: track?.genres?.primary || "Not available",
-        coverArt: track.images.coverart || "Not available",
-        backgroundImage: track.images.background || "Not available",
+exports.handler = async (event, context) => {
+  // Parse the body and the file upload
+  if (event.httpMethod === 'POST') {
+    const formData = new FormData(event.body);
+    const audioFile = formData.get('audio');
+    if (!audioFile) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'No audio file uploaded' })
       };
-
-      return res.json(songInfo);
-    } else {
-      return res.status(404).json({ message: "No song found." });
     }
-  } catch (error) {
-    console.error("Error recognizing the song:", error);
-    res.status(500).json({ error: "An error occurred during recognition." });
-  }
-});
 
-module.exports = app;
+    try {
+      // Save the file temporarily
+      const tempFilePath = path.join('/tmp', audioFile.name);
+      fs.writeFileSync(tempFilePath, audioFile.buffer);
+
+      // Recognize the uploaded audio file with Shazam
+      const recognizeResult = await shazam.recognise(tempFilePath, 'en-US');
+      console.log('Recognition result:', JSON.stringify(recognizeResult, null, 2));
+
+      // Clean up temporary file
+      fs.unlinkSync(tempFilePath);
+
+      if (recognizeResult && recognizeResult.track) {
+        const track = recognizeResult.track;
+
+        const songInfo = {
+          title: track.title || 'Not available',
+          artist: track.subtitle || 'Not available',
+          appleMusic: track.share.href || 'Not available',
+          spotify: track.myshazam?.apple?.previewurl || 'Not available',
+          album: track.sections[0]?.metadata?.find(item => item.title === 'Album')?.text || 'Not available',
+          coverArt: track.images.coverart || 'Not available'
+        };
+
+        return {
+          statusCode: 200,
+          body: JSON.stringify(songInfo)
+        };
+      } else {
+        return {
+          statusCode: 404,
+          body: JSON.stringify({ message: 'No song found.' })
+        };
+      }
+    } catch (error) {
+      console.error('Error recognizing the song:', error);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'An error occurred during recognition.' })
+      };
+    }
+  }
+};
