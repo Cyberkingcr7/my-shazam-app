@@ -2,6 +2,7 @@ const { Shazam } = require('unofficial-shazam');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const formidable = require('formidable');
 
 // Set up Multer for handling file uploads (uploads are temporary in serverless functions)
 const upload = multer({ dest: '/tmp/' });
@@ -12,55 +13,66 @@ const shazam = new Shazam();
 exports.handler = async (event, context) => {
   // Parse the body and the file upload
   if (event.httpMethod === 'POST') {
-    const formData = new FormData(event.body);
-    const audioFile = formData.get('audio');
-    if (!audioFile) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'No audio file uploaded' })
-      };
-    }
+    // Use formidable to parse the incoming form data (including file upload)
+    const form = new formidable.IncomingForm();
+    form.uploadDir = '/tmp'; // specify the upload directory
 
-    try {
-      // Save the file temporarily
-      const tempFilePath = path.join('/tmp', audioFile.name);
-      fs.writeFileSync(tempFilePath, audioFile.buffer);
+    return new Promise((resolve, reject) => {
+      form.parse(event.body, async (err, fields, files) => {
+        if (err) {
+          return reject({
+            statusCode: 500,
+            body: JSON.stringify({ error: 'Error parsing form data' })
+          });
+        }
 
-      // Recognize the uploaded audio file with Shazam
-      const recognizeResult = await shazam.recognise(tempFilePath, 'en-US');
-      console.log('Recognition result:', JSON.stringify(recognizeResult, null, 2));
+        const audioFile = files.audio;
+        if (!audioFile) {
+          return resolve({
+            statusCode: 400,
+            body: JSON.stringify({ error: 'No audio file uploaded' })
+          });
+        }
 
-      // Clean up temporary file
-      fs.unlinkSync(tempFilePath);
+        try {
+          // Recognize the uploaded audio file with Shazam
+          const tempFilePath = audioFile.path; // multer saves the file to this location
+          const recognizeResult = await shazam.recognise(tempFilePath, 'en-US');
+          console.log('Recognition result:', JSON.stringify(recognizeResult, null, 2));
 
-      if (recognizeResult && recognizeResult.track) {
-        const track = recognizeResult.track;
+          // Clean up temporary file
+          fs.unlinkSync(tempFilePath);
 
-        const songInfo = {
-          title: track.title || 'Not available',
-          artist: track.subtitle || 'Not available',
-          appleMusic: track.share.href || 'Not available',
-          spotify: track.myshazam?.apple?.previewurl || 'Not available',
-          album: track.sections[0]?.metadata?.find(item => item.title === 'Album')?.text || 'Not available',
-          coverArt: track.images.coverart || 'Not available'
-        };
+          if (recognizeResult && recognizeResult.track) {
+            const track = recognizeResult.track;
 
-        return {
-          statusCode: 200,
-          body: JSON.stringify(songInfo)
-        };
-      } else {
-        return {
-          statusCode: 404,
-          body: JSON.stringify({ message: 'No song found.' })
-        };
-      }
-    } catch (error) {
-      console.error('Error recognizing the song:', error);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'An error occurred during recognition.' })
-      };
-    }
+            const songInfo = {
+              title: track.title || 'Not available',
+              artist: track.subtitle || 'Not available',
+              appleMusic: track.share.href || 'Not available',
+              spotify: track.myshazam?.apple?.previewurl || 'Not available',
+              album: track.sections[0]?.metadata?.find(item => item.title === 'Album')?.text || 'Not available',
+              coverArt: track.images.coverart || 'Not available'
+            };
+
+            return resolve({
+              statusCode: 200,
+              body: JSON.stringify(songInfo)
+            });
+          } else {
+            return resolve({
+              statusCode: 404,
+              body: JSON.stringify({ message: 'No song found.' })
+            });
+          }
+        } catch (error) {
+          console.error('Error recognizing the song:', error);
+          return resolve({
+            statusCode: 500,
+            body: JSON.stringify({ error: 'An error occurred during recognition.' })
+          });
+        }
+      });
+    });
   }
 };
