@@ -8,6 +8,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1",
-    "unofficial-shazam": "^1.0.9"
+    "unofficial-shazam": "^1.0.9",
+    "formidable": "^2.0.1"
   }
 }
