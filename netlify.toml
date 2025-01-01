@@ -1,0 +1,5 @@
+[build]
+  functions = "netlify-functions"  # Directory for Netlify functions
+
+[dev]
+  functions = "netlify-functions"  # Same for local dev environment
