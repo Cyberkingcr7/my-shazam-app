@@ -1,27 +1,28 @@
 const { Shazam } = require('unofficial-shazam');
 const multer = require('multer');
 const fs = require('fs');
+const streamifier = require('streamifier');
+const { Readable } = require('stream');
 
-// Set up Multer for handling file uploads (uploads are temporary in serverless functions)
+// Set up Multer for handling file uploads
 const upload = multer({ dest: '/tmp/' }).single('audio');
-
-// Shazam instance
 const shazam = new Shazam();
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'POST') {
     return new Promise((resolve) => {
       // Parse the form data using Multer
-      upload(event, null, async (err) => {
+      const body = JSON.parse(event.body);
+      upload(body, null, async (err) => {
         if (err) {
-          console.error('Multer error:', err);
+          console.error('Error parsing form data:', err);
           return resolve({
             statusCode: 500,
             body: JSON.stringify({ error: 'Error parsing form data' }),
           });
         }
 
-        const audioFile = event.file;
+        const audioFile = body.audio;
         if (!audioFile) {
           return resolve({
             statusCode: 400,
@@ -30,13 +31,16 @@ exports.handler = async (event) => {
         }
 
         try {
+          // Convert the file to a stream
+          const buffer = fs.readFileSync(audioFile.path);
+          const audioStream = streamifier.createReadStream(buffer);
+
           // Recognize the uploaded audio file with Shazam
-          const tempFilePath = audioFile.path;
-          const recognizeResult = await shazam.recognise(tempFilePath, 'en-US');
+          const recognizeResult = await shazam.recognise(audioStream, 'en-US');
           console.log('Recognition result:', JSON.stringify(recognizeResult, null, 2));
 
           // Clean up temporary file
-          fs.unlinkSync(tempFilePath);
+          fs.unlinkSync(audioFile.path);
 
           if (recognizeResult && recognizeResult.track) {
             const track = recognizeResult.track;
@@ -71,7 +75,6 @@ exports.handler = async (event) => {
       });
     });
   }
-
   return {
     statusCode: 405,
     body: 'Method Not Allowed',
