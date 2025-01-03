@@ -2,7 +2,6 @@ const { Shazam } = require('unofficial-shazam');
 const multer = require('multer');
 const fs = require('fs');
 const streamifier = require('streamifier');
-const { Readable } = require('stream');
 
 // Set up Multer for handling file uploads
 const upload = multer({ dest: '/tmp/' }).single('audio');
@@ -11,8 +10,12 @@ const shazam = new Shazam();
 exports.handler = async (event) => {
   if (event.httpMethod === 'POST') {
     return new Promise((resolve) => {
-      // Parse the form data using Multer
+      // Netlify's event body may not directly work with multer. Handle it properly.
       const body = JSON.parse(event.body);
+      
+      // Log the incoming request for debugging
+      console.log('Incoming body:', event.body);
+      
       upload(body, null, async (err) => {
         if (err) {
           console.error('Error parsing form data:', err);
@@ -35,6 +38,9 @@ exports.handler = async (event) => {
           const buffer = fs.readFileSync(audioFile.path);
           const audioStream = streamifier.createReadStream(buffer);
 
+          // Log the file path for debugging
+          console.log('Audio file path:', audioFile.path);
+          
           // Recognize the uploaded audio file with Shazam
           const recognizeResult = await shazam.recognise(audioStream, 'en-US');
           console.log('Recognition result:', JSON.stringify(recognizeResult, null, 2));
